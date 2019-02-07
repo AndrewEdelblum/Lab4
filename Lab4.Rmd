@@ -1,0 +1,201 @@
+---
+title: "Lab 4"
+author: "Andrew Edelblum"
+date: "2/4/2019"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(rio)
+library(janitor)
+library(ggplot2)
+library(tidyverse)
+theme_set(theme_minimal())
+options(scipen = 999)
+
+honey <- import("./d.csv", setclass = "tibble")
+```
+
+# 1. Visualize the total production of honey across years by state.
+
+```{r lineplot1}
+pnw <- honey %>% 
+  filter(state == "WA" | state == "CA" | state == "OR")
+
+ggplot(honey, aes(x = year, y = totalprod, group = state)) +
+  geom_line() +
+  labs(x = "Year", y = "Honey Produced", title = "Honey Production by Year by State") +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5))
+```
+
+This is a lot of information to look at here. Too much cognitive load. Most states look to be clumped toward the bottom of the scale in terms of honey production. We can tell that there are $\approx$ 10 states with noticeably distinct trend lines. 
+
+## Use color to highlight the west coast (Washington, Oregon, and California).
+
+```{r lineplot2}
+west <- honey %>% 
+  filter(state == "WA" | state == "CA" | state == "OR")
+
+(p <- ggplot(honey, aes(x = year, y = totalprod, group = state)) +
+  geom_line(color = "grey", alpha = .8) +
+  geom_line(data = west, size = 1.2, aes(color = state)) +
+  labs(x = "Year", y = "Honey Produced", title = "Honey Production by Year by State", subtitle = "California has been producing less honey over the years", color = "State") +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5)))
+```
+
+Ah, much better! Now that we're only devoting focal attention to the trends in three states, it's much clearer to see what we're looking at here. California has been declining in honey production over the last decade and a half. Meanwhile, Oregon and Washington seem like they have never been the country's biggest honey producers. At least not within the last 15 years...
+
+# 2. Reproduce the plot according three different kinds of color blindness, as well as a desaturated version.
+
+A quick ask with the `colorblindr` package!
+
+```{r color_blind, fig.width = 10}
+library(colorblindr)
+
+colorblindr::cvd_grid(p)
+```
+
+# 3. Reproduce the plot using a color blind safe pallette.
+
+I adore the Okabe Ito pallette, so let's use that!
+
+```{r ito}
+p + scale_color_OkabeIto()
+```
+
+# 4. Download the file denoting the region and division of each state.
+
+```{r region}
+region <- import("./region.csv", setclass = "tibble") %>% 
+  clean_names()
+
+region <- rename(region, state_full = state)
+region <- rename(region, state = state_code)
+```
+
+## Join the file with your honey file.
+
+```{r join}
+honey_r <- left_join(honey, region) %>% 
+  group_by(state, state_full, region, year) %>% 
+  summarize(sum_honey = sum(totalprod), 
+            avg_honey = sum_honey/15)
+```
+
+## Produce a bar plot displaying the average honey.
+
+```{r avg_honey}
+ggplot(honey_r, aes(x = reorder(state, avg_honey), y = avg_honey)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(x = "State", y = "Average Honey Produced", title = "Average honey produced by state by region", subtitle = "Over 15 years (1998-2012)", fill = "Region") +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5))
+```
+
+This is an OK plot, but we can make it much better with color.
+
+## Use color to highlight the region of the country the state is from.
+
+```{r avg_honey_highlight}
+ggplot(honey_r, aes(x = reorder(state, avg_honey), y = avg_honey, fill = region)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(x = "State", y = "Average Honey Produced", title = "Average honey produced by state by region", subtitle = "Over 15 years (1998-2012)", fill = "Region") +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5))
+```
+
+Much better! There are a few overall patterns I'd like to point out:
+
+- The **midwest** has some of the country's biggest honey producers (I'm looking at you, North and South Dakota, Minnesota, Wisconsin, and Michigan!), as well as the lowest honey producers (step it up, Illinois and Indiana!).
+- The **south** has some solid honey producers, like Florida coming in as the #4 highest. However, of the bottom 10 states by average honey produced, six of them are southern states. 
+- Meanwhile, the **northeast** likely isn't a great place for honey production. Its states are pretty abysmal on this metric. Sorry to my homestate of New Jersey, which is floating pretty close to the bottom.
+
+All in all, I'd say the regions of the US with the highest honey production are the west and midwest. 
+
+# 5. Create a heatmap displaying the average honey production across years by region.
+
+This might not be the best solution for this, but I first created a new dataframe that counts the number of states in each US region.
+
+```{r state_by_region}
+states_by_region <- region %>% 
+  group_by(region) %>% 
+  count()
+
+big_honey <- left_join(honey, region)
+```
+
+I then added all the honey produced after applying `group_by` by region and year. Next, I joined this dataset with the *states_by_region* dataset I just created. That way, when I take the average of honey produced by region by year, I will be dividing by the number of states in each region.
+
+```{r mutating}
+honey_region <- big_honey %>%
+  group_by(region, year) %>% 
+  summarize(sum_honey = sum(totalprod)) %>% 
+  left_join(states_by_region) %>% 
+  mutate(avg_honey = sum_honey/n)
+```
+
+Now, here's the finished heatmap... with a splash of viridis!
+
+```{r heatmap}
+ggplot(honey_region, aes(x = year, y = region, fill = avg_honey)) +
+  geom_tile() +
+  labs(x = "State", y = "Region", title = "Average honey produced by region by year", subtitle = "Over 15 years (1998-2012)", fill = "Honey Produced") +
+  scale_fill_viridis_c() +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5))
+```
+
+Looks like the midwest is a *big* honey producer, whereas the northeast most certainly is NOT!
+
+# 6. Create at least one more plot of your choosing using color to distinguish, represent data values, or highlight.
+
+Let's make this map happen.
+
+To do so, we'll have to prepare to make a `join` between the **map** and **honey** data! We start by creating a dataframe for the latitude and longitude data. 
+
+```{r map}
+map <- ggplot2::map_data("state")
+map <- rename(map, state = region)
+```
+
+Uh oh! Upon closer inspection, it looks like in one dataframe, the individual states are capitalized, whereas in the other they are not. We'll have to fix this. Not sure if this is the best way to do it, but I ran an `lapply` on my honey dataframe to make lowercase any character values in the state column. I then performed a `left_join` with the **map** and **honey** data.
+
+```{r caps}
+library(maps)
+
+honey_r <- data.frame(lapply(honey_r, function(state_full) {
+  if (is.character(state_full)) return(tolower(state_full))
+  else return(state_full)
+}))
+
+honey_state <- left_join(map, honey_r, by = c("state" = "state_full"))
+```
+
+Here's what I got!
+
+```{r map_plot, fig.width = 10}
+ggplot() +
+  geom_polygon(data = honey_state, aes(x = long, y = lat, group = group, fill = avg_honey)) +
+  scale_fill_viridis_c() +
+  labs(x = "Longitude", y = "Latitude", title = "Average Honey Produced by State", subtitle = "Over 15 years (1998-2012)", fill = "Avg. Honey Produced") +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5))
+```

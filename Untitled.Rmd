@@ -1,0 +1,84 @@
+---
+title: "Lab4"
+author: "Andrew Edelblum"
+date: "2/4/2019"
+output: html_document
+---
+
+```{r setup}
+library(rio)
+library(janitor)
+library(ggplot2)
+theme_set(theme_minimal())
+
+honey <- import("./d.csv", setclass = "tibble")
+```
+
+# 1. Visualize the total production of honey across years by state.
+
+```{r heatmap1}
+ggplot(honey, aes(x = year, y = state, fill = totalprod)) +
+  geom_tile() +
+  scale_fill_distiller(palette = "Blues") +
+  labs(x = "Year", y = "State", title = "Honey Production by Year by State", fill = "Total Honey Produced") +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5))
+```
+
+## Use color to highlight the west coast (Washington, Oregon, and California).
+
+```{r highlights}
+# Vector with all unique states in honey dataframe
+states <- unique(honey$state)
+
+# Assigns different color to the west coast states
+label_color <- ifelse(states == "OR" | states == "WA" | states == "CA", "#C55644", "gray30")
+
+# Assigns bold type to the west coast states
+label_face <- ifelse(states == "OR" | states == "WA" | states == "CA", "bold", "plain")
+```
+
+```{r heatmap_revised}
+(p <- ggplot(honey, aes(x = year, y = state, fill = totalprod)) +
+  geom_tile() +
+  scale_fill_continuous(type = "viridis") +
+  labs(x = "Year", y = "State") +
+  theme(axis.text.y = element_text(color = label_color, face = label_face),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5), 
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.title = element_text(size = 16, face = "bold"),
+        legend.background = element_rect(size = .5)))
+```
+
+# 2. Reproduce the plot according three different kinds of color blindness, as well as a desaturated version.
+
+```{r color_blind}
+library(colorblindr)
+
+colorblindr::cvd_grid(p)
+```
+
+# 3. Reproduce the plot using a color blind safe pallette.
+
+```{r}
+ggplot(honey, aes(x = year, y = state, fill = totalprod)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "magma") +
+  labs(x = "Year", y = "State") +
+  theme(axis.text.y = element_text(color = label_color, face = label_face))
+```
+
+# 4. Download the file here denoting the region and division of each state.
+
+```{r}
+region <- import("./region.csv", setclass = "tibble") %>% 
+  clean_names()
+
+
+```
+
+## Join the file with your honey file.
+
+
